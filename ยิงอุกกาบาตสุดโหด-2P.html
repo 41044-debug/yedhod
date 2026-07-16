@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ยิงอุกกาบาตสุดโหด - 2 Player</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #0b1026;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 8px 0 4px;
+    letter-spacing: 1px;
+  }
+  p.sub {
+    font-size: 13px;
+    color: #b8bcd9;
+    margin: 0 0 12px;
+    text-align: center;
+    max-width: 680px;
+  }
+  #stage {
+    position: relative;
+    width: 100%;
+    max-width: 680px;
+    aspect-ratio: 4 / 3;
+    background: #05070f;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
+  }
+  video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    opacity: 0.5;
+  }
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  #hud {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 28px;
+    font-size: 14px;
+    margin: 10px 0;
+  }
+  #hud .player-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 14px;
+    border-radius: 10px;
+  }
+  #hud .p1 { border: 1px solid #378ADD; }
+  #hud .p2 { border: 1px solid #D4537E; }
+  #hud .label { font-size: 12px; color: #b8bcd9; }
+  #hud .p1 b.name { color: #85B7EB; }
+  #hud .p2 b.name { color: #ED93B1; }
+  #hud b { font-weight: 600; color: #FAC775; }
+  #startScreen, #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5,7,15,0.85);
+    text-align: center;
+    padding: 20px;
+  }
+  #overlay { display: none; }
+  button {
+    background: #378ADD;
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 15px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+  button:hover { background: #2a6cae; }
+  #status {
+    font-size: 13px;
+    color: #9fe1cb;
+    margin-top: 10px;
+    min-height: 18px;
+  }
+  #status.error { color: #F09595; }
+  .tip {
+    font-size: 12px;
+    color: #b8bcd9;
+    max-width: 480px;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+
+<h1>ยิงอุกกาบาตสุดโหด — โหมด 2 ผู้เล่น</h1>
+<p class="sub">ยืนคู่กันหน้ากล้อง: <b style="color:#85B7EB">ผู้เล่น 1 อยู่ฝั่งซ้ายจอ</b> ใช้มือฝั่งซ้าย · <b style="color:#ED93B1">ผู้เล่น 2 อยู่ฝั่งขวาจอ</b> ใช้มือฝั่งขวา · หุบนิ้วโป้งเข้าหานิ้วชี้เพื่อยิง · แบมือฝั่งตัวเองเพื่อล้างเอเลี่ยนฝั่งตัวเอง (คูลดาวน์ 5 วิ) · ถ้าแบมือพร้อมกันทั้งสองฝั่ง จะเกิดหลุมดำล้างทั้งจอ (คูลดาวน์ 5 วิ)</p>
+
+<div id="hud">
+  <div class="player-card p1">
+    <span class="label"><b class="name">ผู้เล่น 1</b></span>
+    <span>คะแนน: <b id="score1">0</b> &nbsp; ชีวิต: <b id="lives1">2</b></span>
+  </div>
+  <div style="text-align:center;">
+    <span class="label">เวลา</span><br>
+    <b id="timer" style="font-size:18px;">120</b>s
+  </div>
+  <div class="player-card p2">
+    <span class="label"><b class="name">ผู้เล่น 2</b></span>
+    <span>คะแนน: <b id="score2">0</b> &nbsp; ชีวิต: <b id="lives2">2</b></span>
+  </div>
+</div>
+
+<div id="stage">
+  <video id="video" playsinline autoplay muted></video>
+  <canvas id="game"></canvas>
+  <div id="flash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity 0.15s ease-out;"></div>
+
+  <div id="startScreen">
+    <p style="font-size:18px;font-weight:600;margin:0 0 6px;">พร้อมแข่งหรือยัง?</p>
+    <p class="tip">กดปุ่มด้านล่างเพื่ออนุญาตให้ใช้กล้อง แล้วยืนคู่กันให้กล้องเห็นมือทั้งสองฝั่งชัดๆ ผู้เล่น 1 อยู่ซ้ายจอ ผู้เล่น 2 อยู่ขวาจอ</p>
+    <button id="startBtn">เปิดกล้องแล้วเริ่มเกม</button>
+    <p id="status"></p>
+  </div>
+
+  <div id="overlay">
+    <p id="overlayTitle" style="font-size:22px;font-weight:600;margin:0 0 8px;">เกมจบ</p>
+    <p id="overlaySub" style="font-size:15px;margin:0 0 16px;color:#ddd;"></p>
+    <button id="restartBtn">เล่นอีกครั้ง</button>
+  </div>
+</div>
+
+<!-- MediaPipe Hands (hand tracking) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const startScreen = document.getElementById('startScreen');
+const startBtn = document.getElementById('startBtn');
+const statusEl = document.getElementById('status');
+const overlay = document.getElementById('overlay');
+const overlayTitle = document.getElementById('overlayTitle');
+const overlaySub = document.getElementById('overlaySub');
+const restartBtn = document.getElementById('restartBtn');
+const timerEl = document.getElementById('timer');
+const flashEl = document.getElementById('flash');
+
+let W = 640, H = 480;
+function resizeCanvas() {
+  const stage = document.getElementById('stage');
+  W = stage.clientWidth;
+  H = stage.clientHeight;
+  canvas.width = W;
+  canvas.height = H;
+}
+window.addEventListener('resize', resizeCanvas);
+
+function rand(a,b){ return Math.random()*(b-a)+a; }
+
+const alienPalettes = [
+  { body: '#97C459', dark: '#3B6D11', eye: '#fff' },
+  { body: '#7F77DD', dark: '#3C3489', eye: '#fff' },
+  { body: '#5DCAA5', dark: '#085041', eye: '#fff' },
+  { body: '#F0997B', dark: '#993C1D', eye: '#fff' },
+  { body: '#ED93B1', dark: '#72243E', eye: '#fff' },
+  { body: '#FAC775', dark: '#854F0B', eye: '#fff' }
+];
+
+const TOTAL_TIME = 120;
+let timeLeft = TOTAL_TIME;
+let running = false;
+let lastTime = 0;
+let stars = [];
+let particles = [];
+let blackHole = null;
+let blackHoleCooldown = 0;
+
+function makePlayer(side, xMin, xMax, shotColor){
+  return {
+    side, xMin, xMax, shotColor,
+    meteors: [],
+    score: 0,
+    lives: 2,
+    spawnTimer: 0,
+    pointer: { x: -100, y: -100, visible: false },
+    pinchActive: false,
+    shootCooldown: 0,
+    openPalmActive: false,
+    bombCooldown: 0,
+    scoreEl: document.getElementById('score' + (side === 'left' ? '1' : '2')),
+    livesEl: document.getElementById('lives' + (side === 'left' ? '1' : '2'))
+  };
+}
+
+let players = [];
+
+function initStars() {
+  stars = [];
+  for (let i=0;i<50;i++){
+    stars.push({x: Math.random()*W, y: Math.random()*H, r: Math.random()*1.5+0.3, tw: Math.random()*Math.PI*2});
+  }
+}
+
+function spawnMeteor(p) {
+  const r = rand(16, 27);
+  const elapsed = TOTAL_TIME - timeLeft;
+  p.meteors.push({
+    x: rand(p.xMin+r, p.xMax-r), y: -r, r,
+    speed: rand(110, 170) + elapsed*1.6,
+    rot: 0, rotSpeed: rand(-2,2),
+    palette: alienPalettes[Math.floor(Math.random()*alienPalettes.length)],
+    eyeCount: Math.random() < 0.7 ? 2 : 1,
+    hasAntenna: Math.random() < 0.6,
+    bob: Math.random()*Math.PI*2
+  });
+}
+
+function explode(x,y,color){
+  for (let i=0;i<14;i++){
+    const ang = Math.random()*Math.PI*2;
+    const spd = rand(60,180);
+    particles.push({x,y,vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd, life:1, color});
+  }
+}
+
+function resetGame(){
+  particles = [];
+  timeLeft = TOTAL_TIME;
+  blackHole = null;
+  blackHoleCooldown = 0;
+  timerEl.textContent = timeLeft;
+
+  players = [
+    makePlayer('left', 0, W/2, '#85B7EB'),
+    makePlayer('right', W/2, W, '#ED93B1')
+  ];
+  players.forEach(p => {
+    p.scoreEl.textContent = 0;
+    p.livesEl.textContent = 2;
+  });
+
+  overlay.style.display = 'none';
+  initStars();
+  running = true;
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+function endGame(reason){
+  running = false;
+  overlay.style.display = 'flex';
+  const [p1, p2] = players;
+  let title, sub;
+  if (reason === 'p1_dead') { title = 'ผู้เล่น 2 ชนะ!'; sub = 'ผู้เล่น 1 หมดชีวิต'; }
+  else if (reason === 'p2_dead') { title = 'ผู้เล่น 1 ชนะ!'; sub = 'ผู้เล่น 2 หมดชีวิต'; }
+  else {
+    if (p1.score > p2.score) { title = 'ผู้เล่น 1 ชนะ!'; }
+    else if (p2.score > p1.score) { title = 'ผู้เล่น 2 ชนะ!'; }
+    else { title = 'เสมอ!'; }
+    sub = 'หมดเวลา';
+  }
+  overlayTitle.textContent = title;
+  overlaySub.textContent = sub + ' — คะแนน ผู้เล่น 1: ' + p1.score + ' / ผู้เล่น 2: ' + p2.score;
+}
+
+function tryShoot(p){
+  if (!running || !p.pointer.visible) return;
+  for (let i=p.meteors.length-1;i>=0;i--){
+    const m = p.meteors[i];
+    const dx = p.pointer.x-m.x, dy = p.pointer.y-m.y;
+    if (dx*dx+dy*dy <= m.r*m.r*1.4){
+      explode(m.x, m.y, '#FAC775');
+      p.meteors.splice(i,1);
+      p.score += Math.round(m.r);
+      p.scoreEl.textContent = p.score;
+      break;
+    }
+  }
+}
+
+function destroyAllMeteors(p){
+  if (p.meteors.length === 0) return;
+  p.meteors.forEach(m => {
+    explode(m.x, m.y, '#FAC775');
+    p.score += Math.round(m.r);
+  });
+  p.meteors = [];
+  p.scoreEl.textContent = p.score;
+  flashEl.style.opacity = '0.85';
+  setTimeout(() => { flashEl.style.opacity = '0'; }, 60);
+}
+
+function triggerBlackHole(){
+  blackHole = { x: W/2, y: H/2, timer: 0, duration: 1.1 };
+}
+
+function loop(now){
+  if (!running) return;
+  const dt = Math.min((now-lastTime)/1000, 0.05);
+  lastTime = now;
+
+  players.forEach(p => {
+    if (p.shootCooldown > 0) p.shootCooldown -= dt;
+    if (p.bombCooldown > 0) p.bombCooldown -= dt;
+  });
+  if (blackHoleCooldown > 0) blackHoleCooldown -= dt;
+
+  if (blackHole){
+    blackHole.timer += dt;
+    if (blackHole.timer >= blackHole.duration){
+      players.forEach(p => {
+        p.meteors.forEach(m => { explode(m.x, m.y, '#7F77DD'); p.score += Math.round(m.r) + 5; });
+        p.meteors = [];
+        p.scoreEl.textContent = p.score;
+      });
+      blackHole = null;
+    }
+  }
+
+  timeLeft -= dt;
+  if (timeLeft <= 0){ timeLeft = 0; timerEl.textContent = 0; endGame('time'); return; }
+  timerEl.textContent = Math.ceil(timeLeft);
+
+  const elapsed = TOTAL_TIME - timeLeft;
+
+  players.forEach(p => {
+    p.spawnTimer -= dt;
+    if (p.spawnTimer <= 0){
+      spawnMeteor(p);
+      if (Math.random() < 0.12 + elapsed*0.001) spawnMeteor(p);
+      p.spawnTimer = Math.max(0.5, 1.3 - elapsed*0.005);
+    }
+
+    for (let i=p.meteors.length-1;i>=0;i--){
+      const m = p.meteors[i];
+      if (blackHole){
+        const dx = blackHole.x-m.x, dy = blackHole.y-m.y;
+        const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+        const pull = 260*dt*(1 + blackHole.timer);
+        m.x += (dx/dist)*pull;
+        m.y += (dy/dist)*pull;
+        m.r *= 0.94;
+        m.rot += m.rotSpeed*dt*3;
+        if (dist < 18 || m.r < 4){
+          explode(m.x, m.y, '#7F77DD');
+          p.score += Math.round(m.r) + 5;
+          p.scoreEl.textContent = p.score;
+          p.meteors.splice(i,1);
+        }
+        continue;
+      }
+      m.y += m.speed*dt;
+      m.rot += m.rotSpeed*dt;
+      if (m.y - m.r > H){
+        p.meteors.splice(i,1);
+        p.lives -= 1;
+        p.livesEl.textContent = p.lives;
+        explode(m.x, H-10, '#E24B4A');
+        if (p.lives <= 0){ endGame(p.side === 'left' ? 'p1_dead' : 'p2_dead'); return; }
+      }
+    }
+  });
+  if (!running) return;
+
+  for (let i=particles.length-1;i>=0;i--){
+    const pt = particles[i];
+    pt.x += pt.vx*dt; pt.y += pt.vy*dt; pt.vy += 200*dt; pt.life -= dt*1.4;
+    if (pt.life <= 0) particles.splice(i,1);
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function drawAlien(m){
+  m.bob += 0.06;
+  ctx.save();
+  ctx.translate(m.x, m.y + Math.sin(m.bob)*3);
+  ctx.rotate(Math.sin(m.rot)*0.15);
+  const p = m.palette;
+  const r = m.r;
+
+  if (m.hasAntenna){
+    ctx.strokeStyle = p.dark;
+    ctx.lineWidth = Math.max(1.5, r*0.08);
+    ctx.beginPath();
+    ctx.moveTo(0, -r*0.75);
+    ctx.lineTo(r*0.35, -r*1.25);
+    ctx.stroke();
+    ctx.fillStyle = p.body;
+    ctx.beginPath();
+    ctx.arc(r*0.35, -r*1.25, r*0.14, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = p.body;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r*0.8, r, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath();
+  ctx.ellipse(r*0.25, r*0.35, r*0.5, r*0.6, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  const eyeR = r*0.28;
+  if (m.eyeCount === 2){
+    [-1,1].forEach(side => {
+      ctx.fillStyle = p.eye;
+      ctx.beginPath();
+      ctx.ellipse(side*r*0.32, -r*0.15, eyeR, eyeR*1.15, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#111';
+      ctx.beginPath();
+      ctx.arc(side*r*0.32, -r*0.1, eyeR*0.45, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(side*r*0.32 - side*eyeR*0.15, -r*0.18, eyeR*0.15, 0, Math.PI*2);
+      ctx.fill();
+    });
+  } else {
+    ctx.fillStyle = p.eye;
+    ctx.beginPath();
+    ctx.ellipse(0, -r*0.15, eyeR*1.3, eyeR*1.4, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#111';
+    ctx.beginPath();
+    ctx.arc(0, -r*0.1, eyeR*0.6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(-eyeR*0.2, -r*0.2, eyeR*0.2, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.strokeStyle = p.dark;
+  ctx.lineWidth = Math.max(1, r*0.06);
+  ctx.beginPath();
+  ctx.arc(0, r*0.45, r*0.22, 0, Math.PI);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawReticle(p){
+  if (!p.pointer.visible) return;
+  ctx.strokeStyle = p.pinchActive ? '#F0997B' : p.shotColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(p.pointer.x, p.pointer.y, 16, 0, Math.PI*2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(p.pointer.x-22, p.pointer.y);
+  ctx.lineTo(p.pointer.x-10, p.pointer.y);
+  ctx.moveTo(p.pointer.x+10, p.pointer.y);
+  ctx.lineTo(p.pointer.x+22, p.pointer.y);
+  ctx.moveTo(p.pointer.x, p.pointer.y-22);
+  ctx.lineTo(p.pointer.x, p.pointer.y-10);
+  ctx.moveTo(p.pointer.x, p.pointer.y+10);
+  ctx.lineTo(p.pointer.x, p.pointer.y+22);
+  ctx.stroke();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  stars.forEach(s=>{
+    s.tw += 0.03;
+    const a = 0.4+Math.sin(s.tw)*0.3;
+    ctx.fillStyle = `rgba(255,255,255,${Math.max(0,a)})`;
+    ctx.beginPath();
+    ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    ctx.fill();
+  });
+
+  // dividing line
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.setLineDash([6,6]);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(W/2, 0);
+  ctx.lineTo(W/2, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  players.forEach(p => p.meteors.forEach(drawAlien));
+
+  particles.forEach(pt=>{
+    ctx.globalAlpha = Math.max(0,pt.life);
+    ctx.fillStyle = pt.color;
+    ctx.beginPath();
+    ctx.arc(pt.x,pt.y,3,0,Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  if (blackHole){
+    const pulse = 30 + Math.sin(blackHole.timer*20)*6;
+    const grad = ctx.createRadialGradient(blackHole.x, blackHole.y, 2, blackHole.x, blackHole.y, pulse+20);
+    grad.addColorStop(0, '#000');
+    grad.addColorStop(0.6, '#3C3489');
+    grad.addColorStop(1, 'rgba(60,52,137,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(blackHole.x, blackHole.y, pulse+20, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#AFA9EC';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(blackHole.x, blackHole.y, pulse, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  players.forEach(drawReticle);
+}
+
+restartBtn.addEventListener('click', resetGame);
+
+// ---------- Hand tracking ----------
+function distXY(a,b){
+  const dx = a.x-b.x, dy = a.y-b.y;
+  return Math.sqrt(dx*dx+dy*dy);
+}
+
+function analyzeHand(lm){
+  const wrist = lm[0];
+  const indexTip = lm[8];
+  const thumbTip = lm[4];
+
+  const pinchDist = distXY(indexTip, thumbTip);
+  const isPinching = pinchDist < 0.06;
+
+  const fingers = [[8,6],[12,10],[16,14],[20,18]];
+  const extendedCount = fingers.filter(([tip,pip]) => {
+    return distXY(lm[tip], wrist) > distXY(lm[pip], wrist) * 1.15;
+  }).length;
+  const thumbExtended = distXY(lm[4], wrist) > distXY(lm[2], wrist) * 1.05;
+  const isOpenPalm = extendedCount >= 4 && thumbExtended && !isPinching;
+
+  // mirrored screen x (matches on-screen rendering since video is CSS-mirrored)
+  const screenX = (1 - indexTip.x) * W;
+  const screenY = indexTip.y * H;
+
+  return { screenX, screenY, isPinching, isOpenPalm };
+}
+
+function onResults(results){
+  // reset visibility each frame; will be set true below if a hand maps to that side
+  players.forEach(p => { p.pointer.visible = false; });
+
+  if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0 || players.length === 0){
+    players.forEach(p => { p.pinchActive = false; p.openPalmActive = false; });
+    return;
+  }
+
+  const handsInfo = results.multiHandLandmarks.map(analyzeHand);
+
+  // assign each hand to whichever side its screen x falls into; first hand wins if two land on same side
+  const assigned = { left: null, right: null };
+  handsInfo.forEach(h => {
+    const side = h.screenX < W/2 ? 'left' : 'right';
+    if (!assigned[side]) assigned[side] = h;
+  });
+
+  players.forEach(p => {
+    const h = assigned[p.side];
+    if (!h){
+      p.pinchActive = false;
+      p.openPalmActive = false;
+      return;
+    }
+    p.pointer.x = h.screenX;
+    p.pointer.y = h.screenY;
+    p.pointer.visible = true;
+
+    if (h.isPinching && !p.pinchActive && p.shootCooldown <= 0){
+      tryShoot(p);
+      p.shootCooldown = 0.35;
+    }
+    p.pinchActive = h.isPinching;
+
+    const isSingleOpenPalm = h.isOpenPalm;
+    if (isSingleOpenPalm && !p.openPalmActive && p.bombCooldown <= 0 && !(assigned.left && assigned.left.isOpenPalm && assigned.right && assigned.right.isOpenPalm)){
+      destroyAllMeteors(p);
+      p.bombCooldown = 5;
+    }
+    p.openPalmActive = isSingleOpenPalm;
+  });
+
+  const bothOpen = assigned.left && assigned.right && assigned.left.isOpenPalm && assigned.right.isOpenPalm;
+  if (bothOpen && blackHoleCooldown <= 0 && !blackHole){
+    triggerBlackHole();
+    blackHoleCooldown = 5;
+  }
+}
+
+let hands, camera;
+
+async function startCamera(){
+  statusEl.classList.remove('error');
+  statusEl.textContent = 'กำลังขอสิทธิ์ใช้กล้อง...';
+  try {
+    hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    });
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.6
+    });
+    hands.onResults(onResults);
+
+    camera = new Camera(video, {
+      onFrame: async () => { await hands.send({ image: video }); },
+      width: 640,
+      height: 480
+    });
+
+    await camera.start();
+    resizeCanvas();
+    statusEl.textContent = '';
+    startScreen.style.display = 'none';
+    resetGame();
+  } catch (err){
+    statusEl.classList.add('error');
+    statusEl.textContent = 'เปิดกล้องไม่สำเร็จ: กรุณาอนุญาตสิทธิ์กล้องในเบราว์เซอร์แล้วลองใหม่ (' + err.message + ')';
+  }
+}
+
+startBtn.addEventListener('click', startCamera);
+window.addEventListener('load', resizeCanvas);
+</script>
+
+</body>
+</html>
